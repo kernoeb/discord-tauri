@@ -1,9 +1,11 @@
+use muda::{Menu, MenuEvent, MenuItem};
 use tao::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     platform::unix::WindowExtUnix,
     window::WindowBuilder,
 };
+use tray_icon::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use wry::{WebViewBuilder, WebViewBuilderExtUnix};
 
 fn main() -> wry::Result<()> {
@@ -12,162 +14,67 @@ fn main() -> wry::Result<()> {
     let event_loop = EventLoop::new();
 
     let window = WindowBuilder::new()
-        .with_title("Hello WRY")
+        .with_title("My App")
+        .with_visible(false)
         .with_inner_size(tao::dpi::LogicalSize::new(800.0, 600.0))
         .build(&event_loop)
         .expect("Failed to build window");
 
-    let vbox = window.default_vbox().expect("Failed to get vbox");
+    #[cfg(target_os = "windows")]
+    window_shadows::set_shadow(&window, true).ok();
 
+    window.set_visible(true);
+
+    let vbox = window.default_vbox().expect("Failed to get vbox");
     let _webview = WebViewBuilder::new()
-        .with_html("<script>location.replace('https://discord.com/app')</script>")
+        .with_html("<script>window.location.replace('https://discord.com/app')</script>")
         .build_gtk(vbox)
         .expect("Failed to build WebView");
 
+    let tray_menu = Menu::new();
+    let quit_item = MenuItem::new("Quit", true, None);
+    tray_menu.append(&quit_item).unwrap();
+    let quit_id = quit_item.id().clone();
+
+    let _tray = TrayIconBuilder::new()
+        .with_tooltip("Discord")
+        .with_menu(Box::new(tray_menu))
+        .build()
+        .expect("Failed to build tray icon");
+
+    let tray_channel = TrayIconEvent::receiver();
+    let menu_channel = MenuEvent::receiver();
+
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
+
+        // left click on tray icon windows and mac only
+        if let Ok(tray_event) = tray_channel.try_recv()
+            && let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = tray_event
+        {
+            if !window.is_visible() {
+                window.set_visible(true);
+            } else {
+                window.set_focus();
+            }
+        }
+
+        if let Ok(menu_event) = menu_channel.try_recv()
+            && menu_event.id == quit_id
+        {
+            std::process::exit(0);
+        }
 
         if let Event::WindowEvent {
             event: WindowEvent::CloseRequested,
             ..
         } = event
         {
-            *control_flow = ControlFlow::Exit;
+            window.set_visible(false);
         }
     });
 }
-
-/*
-#[derive(serde::Serialize, Clone)]
-struct Payload {
-    message: String,
-}
-
-// Tauri imports
-use tauri::{CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu};
-
-#[cfg(target_os = "windows")]
-fn main() {
-    // We can't make a separate file for a Desktop Tray yet, so we make it here
-    // Create an item of the context menu called `quit` with the string `Quit Discord`
-    let quit_item = CustomMenuItem::new("quit".to_string(), "Quit Discord");
-    // Create a new context menu with the item above
-    let context_menu = SystemTrayMenu::new().add_item(quit_item);
-    // Create a new system tray with the context menu above
-    let desktop_tray = SystemTray::new().with_menu(context_menu);
-
-    // Start Tauri
-    tauri::Builder::default()
-        // Register the commands
-        .invoke_handler(tauri::generate_handler![])
-        // On Windows 11, the window will have rounded corners.
-        .setup(|app| {
-            let window = app.get_window(&"main").unwrap();
-            window_shadows::set_shadow(&window, true).expect("Unsupported platform!");
-            window.show().unwrap();
-            Ok(())
-        })
-        // Register the desktop tray
-        .system_tray(desktop_tray)
-        // Add events for the desktop tray
-        .on_system_tray_event(|app, event| match event {
-            // If the event is a left click into the icon,
-            // verify that the window is closed and re-open it
-            // while setting it up again (Tauri doesn't save
-            // the status of hidden windows).
-            SystemTrayEvent::LeftClick {
-                position: _,
-                size: _,
-                ..
-            } => {
-                let window = app.get_window("main").unwrap();
-                // If the window is closed
-                if !window.is_visible().unwrap() {
-                    // Re-open the window
-                    window.show().unwrap();
-                }
-                // Even if the window isn't closed, it could be minimized in the taskbar; set it as focused
-                else {
-                    window.set_focus().unwrap();
-                }
-            }
-            // If the event is a click to an item
-            SystemTrayEvent::MenuItemClick { id, .. } => {
-                // We compare the name of the item to...
-                match id.as_str() {
-                    // `quit` is the item with the string `Quit Discord`
-                    // If the user clicks quit, close discord-tauri
-                    "quit" => {
-                        std::process::exit(0);
-                    }
-                    _ => {}
-                }
-            }
-            _ => {}
-        })
-        .run(tauri::generate_context!())
-        .expect("Error running discord-tauri");
-}
-
-#[cfg(target_os = "linux")]
-fn main() {
-    // We can't make a separate file for a Desktop Tray yet, so we make it here
-    // Create an item of the context menu called `quit` with the string `Quit Discord`
-    let quit_item = CustomMenuItem::new("quit".to_string(), "Quit Discord");
-    // Create a new context menu with the item above
-    let context_menu = SystemTrayMenu::new().add_item(quit_item);
-    // Create a new system tray with the context menu above
-    let desktop_tray = SystemTray::new().with_menu(context_menu);
-
-    // Start Tauri
-    tauri::Builder::default()
-        // Register the commands
-        .invoke_handler(tauri::generate_handler![])
-        // Show the main window
-        .setup(|app| {
-            let window = app.get_window(&"main").unwrap();
-            window.show().unwrap();
-            Ok(())
-        })
-        // Register the desktop tray
-        .system_tray(desktop_tray)
-        // Add events for the desktop tray
-        .on_system_tray_event(|app, event| match event {
-            // If the event is a left click into the icon,
-            // verify that the window is closed and re-open it
-            // while setting it up again (Tauri doesn't save
-            // the status of hidden windows).
-            SystemTrayEvent::LeftClick {
-                position: _,
-                size: _,
-                ..
-            } => {
-                let window = app.get_window("main").unwrap();
-                // If the window is closed
-                if !window.is_visible().unwrap() {
-                    // Re-open the window
-                    window.show().unwrap();
-                }
-                // Even if the window isn't closed, it could be minimized in the taskbar; set it as focused
-                else {
-                    window.set_focus().unwrap();
-                }
-            }
-            // If the event is a click to an item
-            SystemTrayEvent::MenuItemClick { id, .. } => {
-                // We compare the name of the item to...
-                match id.as_str() {
-                    // `quit` is the item with the string `Quit Discord`
-                    // If the user clicks quit, close discord-tauri
-                    "quit" => {
-                        std::process::exit(0);
-                    }
-                    _ => {}
-                }
-            }
-            _ => {}
-        })
-        .run(tauri::generate_context!())
-        .expect("Error running discord-tauri");
-}
-*/
