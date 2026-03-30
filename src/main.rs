@@ -1,8 +1,43 @@
-#![cfg_attr(
-    all(not(debug_assertions), target_os = "windows"),
-    windows_subsystem = "windows"
-)]
+use tao::{
+    event::{Event, WindowEvent},
+    event_loop::{ControlFlow, EventLoop},
+    platform::unix::WindowExtUnix,
+    window::WindowBuilder,
+};
+use wry::{WebViewBuilder, WebViewBuilderExtUnix};
 
+fn main() -> wry::Result<()> {
+    unsafe { std::env::set_var("GDK_BACKEND", "wayland") };
+
+    let event_loop = EventLoop::new();
+
+    let window = WindowBuilder::new()
+        .with_title("Hello WRY")
+        .with_inner_size(tao::dpi::LogicalSize::new(800.0, 600.0))
+        .build(&event_loop)
+        .expect("Failed to build window");
+
+    let vbox = window.default_vbox().expect("Failed to get vbox");
+
+    let _webview = WebViewBuilder::new()
+        .with_html("<script>location.replace('https://discord.com/app')</script>")
+        .build_gtk(vbox)
+        .expect("Failed to build WebView");
+
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Wait;
+
+        if let Event::WindowEvent {
+            event: WindowEvent::CloseRequested,
+            ..
+        } = event
+        {
+            *control_flow = ControlFlow::Exit;
+        }
+    });
+}
+
+/*
 #[derive(serde::Serialize, Clone)]
 struct Payload {
     message: String,
@@ -135,3 +170,4 @@ fn main() {
         .run(tauri::generate_context!())
         .expect("Error running discord-tauri");
 }
+*/

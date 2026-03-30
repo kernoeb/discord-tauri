@@ -1,0 +1,25 @@
+
+cargo-features = ["profile-rustflags", "trim-paths"]
+
+[package]
+name = "discord-tauri"
+version = "0.4.0"
+description = "Discord, wrapped in Tauri."
+authors = ["DrPuc", "eyewave"]
+license = "GPLv3"
+repository = "https://github.com/eye-wave/discord-tauri"
+default-run = "discord-tauri"
+edition = "2024"
+
+[dependencies]
+tao = { version = "0.35.0", features = ["rwh_06"] }
+wry = "0.55.0"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = "z"
+panic = "abort"
+strip = true
+trim-paths = "all"
+rustflags = ["-Cdebuginfo=0", "-Zthreads=8"]
