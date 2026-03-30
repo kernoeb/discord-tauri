@@ -14,7 +14,7 @@ fn main() -> wry::Result<()> {
     let event_loop = EventLoop::new();
 
     let window = WindowBuilder::new()
-        .with_title("My App")
+        .with_title("Discord")
         .with_visible(false)
         .with_inner_size(tao::dpi::LogicalSize::new(800.0, 600.0))
         .build(&event_loop)
