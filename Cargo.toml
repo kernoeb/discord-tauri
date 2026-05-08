@@ -21,7 +21,7 @@ image = { version = "0.25.10", default-features = false, features = ["ico", "png
 muda = "0.19.1"
 tao = { version = "0.35.2" }
 tray-icon = "0.24.0"
-wry = { version = "0.55.1", features = ["devtools"] }
+wry = { version = "0.55.1", features = ["devtools", "fullscreen"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 window-shadows = "0.2.2"
