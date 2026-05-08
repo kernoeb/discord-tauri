@@ -17,14 +17,20 @@ identifier = "discord.tauri"
 icon = ["icons/icon.ico", "icons/icon.icns"]
 
 [dependencies]
-image = { version = "0.25.10", default-features = false, features = ["ico"]}
-muda = "0.17.1"
-tao = { version = "0.35.0" }
-tray-icon = "0.21.3"
-wry = "0.55.0"
+image = { version = "0.25.10", default-features = false, features = ["ico", "png"]}
+muda = "0.19.1"
+tao = { version = "0.35.2" }
+tray-icon = "0.24.0"
+wry = { version = "0.55.1", features = ["devtools"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 window-shadows = "0.2.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSDockTile", "NSImage", "NSColor", "NSWindow", "NSResponder", "NSAppearance", "NSView", "objc2-core-graphics"] }
+objc2-foundation = { version = "0.3", features = ["NSData", "NSString"] }
+objc2-quartz-core = { version = "0.3", features = ["CALayer", "objc2-core-graphics"] }
 
 [profile.release]
 codegen-units = 1
