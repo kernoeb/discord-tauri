@@ -141,6 +141,59 @@ const BADGE_OBSERVER_SCRIPT: &str = r#"
 })();
 "#;
 
+// Vencord bundle — fetched + patched in build.rs.
+const VENCORD_BROWSER_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/vencord/browser.js"));
+const VENCORD_BROWSER_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/vencord/browser.css"));
+
+// Skips the `with_html` bootstrap doc (empty hostname, discarded by meta-refresh)
+// and any non-Discord iframe — parsing/running Vencord there is pure waste.
+const HOST_GATE: &str = "/(?:^|\\.)discord\\.com$/i.test(location.hostname)";
+
+fn build_vencord_css_loader() -> String {
+    let mut out = String::with_capacity(VENCORD_BROWSER_CSS.len() + 256);
+    out.push_str("if(");
+    out.push_str(HOST_GATE);
+    out.push_str("){try{var s=document.createElement('style');s.id='vencord-css';s.textContent=");
+    push_js_string_literal(&mut out, VENCORD_BROWSER_CSS);
+    out.push_str(";(document.head||document.documentElement).appendChild(s);}catch(e){console.error('[discord-tauri] Vencord CSS inject failed',e);}}");
+    out
+}
+
+fn build_vencord_js_loader() -> String {
+    // Vencord's bundle is `"use strict";var Vencord=(()=>{...})();` — a single
+    // expression statement assigning to a `var`, which is safe to wrap in an
+    // `if` block (var hoists out, the IIFE only runs when the gate passes).
+    let mut out = String::with_capacity(VENCORD_BROWSER_JS.len() + 128);
+    out.push_str("if(");
+    out.push_str(HOST_GATE);
+    out.push_str("){\n");
+    out.push_str(VENCORD_BROWSER_JS);
+    out.push_str("\n}");
+    out
+}
+
+fn push_js_string_literal(out: &mut String, s: &str) {
+    use std::fmt::Write;
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            // U+2028/2029 are valid in CSS but break JS string literals.
+            '\u{2028}' => out.push_str("\\u2028"),
+            '\u{2029}' => out.push_str("\\u2029"),
+            c if (c as u32) < 0x20 => {
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+}
+
 #[cfg(target_os = "macos")]
 const DRAG_REGION_SCRIPT: &str = r#"
 (function () {
@@ -251,17 +304,30 @@ fn main() -> wry::Result<()> {
         }
     };
 
-    let webview_builder = WebViewBuilder::new()
+    let vencord_disabled = std::env::var("DT_NO_VENCORD").is_ok();
+    let force_devtools = std::env::var("DT_DEVTOOLS").is_ok();
+
+    let mut webview_builder = WebViewBuilder::new()
         .with_html(html)
         .with_user_agent(USER_AGENT)
         .with_autoplay(true)
-        .with_devtools(cfg!(debug_assertions))
+        .with_devtools(cfg!(debug_assertions) || force_devtools)
         .with_background_color((0, 0, 0, 255))
         .with_initialization_script(DARK_BACKGROUND_SCRIPT)
         .with_initialization_script(TRACKING_BLOCKER_SCRIPT)
         .with_initialization_script(BADGE_OBSERVER_SCRIPT)
         .with_on_page_load_handler(on_page_load)
         .with_ipc_handler(ipc_handler);
+
+    let vencord_css_loader;
+    let vencord_js_loader;
+    if !vencord_disabled {
+        vencord_css_loader = build_vencord_css_loader();
+        vencord_js_loader = build_vencord_js_loader();
+        webview_builder = webview_builder
+            .with_initialization_script(&vencord_css_loader)
+            .with_initialization_script(&vencord_js_loader);
+    }
 
     #[cfg(target_os = "macos")]
     let webview_builder = webview_builder.with_initialization_script(DRAG_REGION_SCRIPT);
